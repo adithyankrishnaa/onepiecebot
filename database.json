@@ -1,1 +1,19 @@
 
+{
+  "users": [
+    123456789,
+    987654321
+  ],
+  "videos": [
+    {
+      "name": "onepiece_episode_101.mp4",
+      "path": "/path/to/videos/onepiece_episode_101.mp4",
+      "episode": 101
+    },
+    {
+      "name": "onepiece_episode_102.mp4",
+      "path": "/path/to/videos/onepiece_episode_102.mp4",
+      "episode": 102
+    }
+  ]
+}
