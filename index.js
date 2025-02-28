@@ -1,16 +1,19 @@
-// Install required packages: npm install node-telegram-bot-api fs
+import TelegramBot from 'node-telegram-bot-api';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const TelegramBot = require('node-telegram-bot-api');
-const fs = require('fs');
-const path = require('path');
+// Fix __dirname for ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const TOKEN = '8172383815:AAG37FSq_wkyxb6qhNPpD4-SDG5XhmvOsIg'; // Replace with your bot token
+const TOKEN = '8172383815:AAG37FSq_wkyxb6qhNPpD4-SDG5XhmvOsIg'; // Replace with your actual bot token
 const ADMIN_ID = '1942169446'; // Replace with your Telegram user ID
 
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-const DB_PATH = path.resolve('database.json');
-const VIDEO_DIR = path.resolve('videos');
+const DB_PATH = path.join(__dirname, 'database.json');
+const VIDEO_DIR = path.join(__dirname, 'videos');
 
 // Ensure the videos folder exists
 if (!fs.existsSync(VIDEO_DIR)) {
@@ -18,80 +21,115 @@ if (!fs.existsSync(VIDEO_DIR)) {
 }
 
 // Load database or initialize
-let db = fs.existsSync(DB_PATH) ? JSON.parse(fs.readFileSync(DB_PATH)) : { users: [], videos: [] };
+let db = { users: [], videos: [] }; // Default structure
+
+try {
+  if (fs.existsSync(DB_PATH)) {
+    const data = fs.readFileSync(DB_PATH, 'utf-8');
+    if (data) {
+      db = JSON.parse(data);
+    }
+  }
+} catch (err) {
+  console.error('Failed to read or parse the database file:', err);
+}
 
 // Save database function
 const saveDB = () => fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 
 // Helper: Extract episode number
 const extractEpisode = (filename) => {
-  const match = filename.match(/(?:episode|ep)\.?\s*(\d+)/i);
-  return match ? parseInt(match[1], 10) : null;
+  const match = filename.match(/(?:episode|ep|(\d+))/i);
+  return match ? parseInt(match[1]  match[0], 10) : null;
 };
 
-// Track users
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
+// Welcome message function
+const welcomeMessage = `👋 Welcome to the One Piece Video Bot!\n\n` +
+  `🤖 You can request videos by name or episode number.\n` +
+  `📹 To upload videos as an admin, please send them directly to me.`;
 
+// Track users
+bot.onText(/\/start/, (msg) => {
+  const chatId = msg.chat.id;
   if (!db.users.includes(chatId)) {
     db.users.push(chatId);
     saveDB();
   }
+  bot.sendMessage(chatId, welcomeMessage);
+});
 
-  // Admin: Get total users
-  if (msg.text === '/total' && chatId.toString() === ADMIN_ID) {
-    bot.sendMessage(chatId, `Total Users: ${db.users.length}`);
+// Admin: Get total users
+bot.onText(/\/total/, async (msg) => {
+  const chatId = msg.chat.id;
+  if (chatId.toString() === ADMIN_ID) {
+    return bot.sendMessage(chatId, `Total Users: ${db.users.length}`);
+  }
+});
+
+// Function to save video
+const saveVideo = async (videoFile, fileName) => {
+  const episode = extractEpisode(fileName);
+  const newFileName = episode ? `One Piece Episode ${episode}.mp4` : `One Piece ${fileName}`;
+  const localPath = path.join(VIDEO_DIR, newFileName);
+
+  // Save the video file
+  const filePath = await bot.getFileLink(videoFile);
+  const response = await fetch(filePath);
+  const buffer = await response.buffer();
+  fs.writeFileSync(localPath, buffer);
+
+  return { fileId: videoFile, name: newFileName, episode };
+};
+
+// Function to handle video uploads
+const handleVideoUpload = async (msg) => {
+  const chatId = msg.chat.id;
+  const fileName = msg.video.file_name  video_${msg.video.file_id}.mp4;
+  const fileId = msg.video.file_id;
+
+  try {
+    const videoDetails = await saveVideo(fileId, fileName);
+    db.videos.push(videoDetails);
+    saveDB();
+    bot.sendMessage(chatId, ✅ Uploaded: ${videoDetails.name});
+  } catch (err) {
+    console.error('Upload failed:', err);
+    bot.sendMessage(chatId, '❌ Failed to upload video.');
+  }
+};
+
+// Admin: Upload video
+bot.on(['video', 'document'], async (msg) => {
+  const chatId = msg.chat.id;
+  if (chatId.toString() === ADMIN_ID) {
+    await handleVideoUpload(msg);
+  }
+});
+
+// User: Request video by name
+bot.on('message', (msg) => {
+  const chatId = msg.chat.id;
+
+  // Check for requests in the format of "filename.mp4"
+  const requestedVideoName = msg.text.trim();
+  const video = db.videos.find((v) => v.name === requestedVideoName);
+
+  if (video) {
+    return bot.sendVideo(chatId, video.fileId); // Send the video if found in the database
   }
 
-  // Admin: Upload video
-  if (msg.video && chatId.toString() === ADMIN_ID) {
-    const fileId = msg.video.file_id;
-
-    // File size check (2GB limit)
-    if (msg.video.file_size > 2000000000) {
-      return bot.sendMessage(chatId, 'File too large to upload.');
-    }
-
-    bot.getFile(fileId).then((file) => {
-      const fileName = path.basename(file.file_path);
-      const localPath = path.join(VIDEO_DIR, fileName);
-
-      bot.downloadFile(fileId, VIDEO_DIR)
-        .then(() => {
-          const episode = extractEpisode(fileName);
-
-          if (episode) {
-            // Avoid duplicate entries
-            if (!db.videos.some((v) => v.episode === episode)) {
-              db.videos.push({ name: fileName, path: localPath, episode });
-              saveDB();
-              bot.sendMessage(chatId, `Uploaded: ${fileName}`);
-            } else {
-              bot.sendMessage(chatId, `Episode ${episode} already exists.`);
-            }
-          } else {
-            bot.sendMessage(chatId, 'Episode number not found in filename.');
-          }
-        })
-        .catch((err) => {
-          console.error('Download failed:', err);
-          bot.sendMessage(chatId, 'Failed to download video.');
-        });
-    });
-  }
-
-  // User: Request episode
+  // User: Request episode by number
   const episodeRequest = msg.text?.match(/onepiece episode (\d+)/i);
   if (episodeRequest) {
     const requestedEpisode = parseInt(episodeRequest[1], 10);
-    const video = db.videos.find((v) => v.episode === requestedEpisode);
+    const videoByEpisode = db.videos.find((v) => v.episode === requestedEpisode);
 
-    if (video) {
-      bot.sendVideo(chatId, video.path);
+    if (videoByEpisode) {
+      return bot.sendVideo(chatId, videoByEpisode.fileId); // Use file_id to send the video
     } else {
-      bot.sendMessage(chatId, 'Episode not found.');
+      return bot.sendMessage(chatId, '⚠️ Episode not found.');
     }
   }
 });
 
-console.log('Bot is running...');
+console.log('🚀 Bot is running...');
