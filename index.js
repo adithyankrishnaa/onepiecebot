@@ -69,7 +69,8 @@ bot.onText(/\/total/, async (msg) => {
 // Function to save video
 const saveVideo = async (fileId, fileName) => {
   const episode = extractEpisode(fileName);
-  const newFileName = episode ? `One Piece Episode ${episode}.mp4` : `One Piece ${fileName}`;
+  const fileExtension = path.extname(fileName) || '.mp4'; // Default to .mp4 if no extension is found
+  const newFileName = episode ? `One Piece Episode ${episode}${fileExtension}` : `One Piece ${fileName}`;
   const localPath = path.join(VIDEO_DIR, newFileName);
 
   // Save the video file
@@ -91,7 +92,7 @@ const handleVideoUpload = async (msg) => {
     fileName = msg.video.file_name || `video_${fileId}.mp4`;
   } else if (msg.document) {
     fileId = msg.document.file_id;
-    fileName = msg.document.file_name || `document_${fileId}.mp4`;
+    fileName = msg.document.file_name || `document_${fileId}${path.extname(msg.document.file_name) || '.mkv'}`;
   }
 
   try {
@@ -122,7 +123,7 @@ bot.on('message', (msg) => {
   const video = db.videos.find((v) => v.name === requestedVideoName);
 
   if (video) {
-    return bot.sendVideo(chatId, video.fileId); // Send the video if found in the database
+    return bot.sendDocument(chatId, video.fileId); // Send the document if found in the database
   }
 
   // User: Request episode by number
@@ -132,7 +133,7 @@ bot.on('message', (msg) => {
     const videoByEpisode = db.videos.find((v) => v.episode === requestedEpisode);
 
     if (videoByEpisode) {
-      return bot.sendVideo(chatId, videoByEpisode.fileId); // Use file_id to send the video
+      return bot.sendDocument(chatId, videoByEpisode.fileId); // Use file_id to send the document
     } else {
       return bot.sendMessage(chatId, '⚠️ Episode not found.');
     }
