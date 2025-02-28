@@ -9,11 +9,12 @@ const ADMIN_ID = '1942169446'; // Replace with your Telegram user ID
 
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-const DB_PATH = './database.json';
+const DB_PATH = path.join(__dirname, 'database.json');
+const VIDEO_DIR = path.join(__dirname, 'videos');
 
 // Ensure the videos folder exists
-if (!fs.existsSync('./videos')) {
-  fs.mkdirSync('./videos');
+if (!fs.existsSync(VIDEO_DIR)) {
+  fs.mkdirSync(VIDEO_DIR);
 }
 
 // Load database or initialize
@@ -53,9 +54,9 @@ bot.on('message', (msg) => {
 
     bot.getFile(fileId).then((file) => {
       const fileName = path.basename(file.file_path);
-      const localPath = path.join(__dirname, 'videos', fileName);
+      const localPath = path.join(VIDEO_DIR, fileName);
 
-      bot.downloadFile(fileId, './videos')
+      bot.downloadFile(fileId, VIDEO_DIR)
         .then(() => {
           const episode = extractEpisode(fileName);
 
