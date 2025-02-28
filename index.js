@@ -9,8 +9,8 @@ const ADMIN_ID = '1942169446'; // Replace with your Telegram user ID
 
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-const DB_PATH = path.join(__dirname, 'database.json');
-const VIDEO_DIR = path.join(__dirname, 'videos');
+const DB_PATH = path.resolve('database.json');
+const VIDEO_DIR = path.resolve('videos');
 
 // Ensure the videos folder exists
 if (!fs.existsSync(VIDEO_DIR)) {
