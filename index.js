@@ -11,6 +11,11 @@ const bot = new TelegramBot(TOKEN, { polling: true });
 
 const DB_PATH = './database.json';
 
+// Ensure the videos folder exists
+if (!fs.existsSync('./videos')) {
+  fs.mkdirSync('./videos');
+}
+
 // Load database or initialize
 let db = fs.existsSync(DB_PATH) ? JSON.parse(fs.readFileSync(DB_PATH)) : { users: [], videos: [] };
 
@@ -19,7 +24,7 @@ const saveDB = () => fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 
 // Helper: Extract episode number
 const extractEpisode = (filename) => {
-  const match = filename.match(/episode (\d+)/i);
+  const match = filename.match(/(?:episode|ep)\.?\s*(\d+)/i);
   return match ? parseInt(match[1], 10) : null;
 };
 
@@ -40,22 +45,37 @@ bot.on('message', (msg) => {
   // Admin: Upload video
   if (msg.video && chatId.toString() === ADMIN_ID) {
     const fileId = msg.video.file_id;
+
+    // File size check (2GB limit)
+    if (msg.video.file_size > 2000000000) {
+      return bot.sendMessage(chatId, 'File too large to upload.');
+    }
+
     bot.getFile(fileId).then((file) => {
-      const filePath = file.file_path;
-      const fileName = path.basename(filePath);
-      const localPath = `./videos/${fileName}`;
+      const fileName = path.basename(file.file_path);
+      const localPath = path.join(__dirname, 'videos', fileName);
 
-      bot.downloadFile(fileId, './videos').then(() => {
-        const episode = extractEpisode(fileName);
+      bot.downloadFile(fileId, './videos')
+        .then(() => {
+          const episode = extractEpisode(fileName);
 
-        if (episode) {
-          db.videos.push({ name: fileName, path: localPath, episode });
-          saveDB();
-          bot.sendMessage(chatId, `Uploaded: ${fileName}`);
-        } else {
-          bot.sendMessage(chatId, 'Episode number not found in filename.');
-        }
-      });
+          if (episode) {
+            // Avoid duplicate entries
+            if (!db.videos.some((v) => v.episode === episode)) {
+              db.videos.push({ name: fileName, path: localPath, episode });
+              saveDB();
+              bot.sendMessage(chatId, `Uploaded: ${fileName}`);
+            } else {
+              bot.sendMessage(chatId, `Episode ${episode} already exists.`);
+            }
+          } else {
+            bot.sendMessage(chatId, 'Episode number not found in filename.');
+          }
+        })
+        .catch((err) => {
+          console.error('Download failed:', err);
+          bot.sendMessage(chatId, 'Failed to download video.');
+        });
     });
   }
 
