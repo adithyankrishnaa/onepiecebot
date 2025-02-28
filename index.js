@@ -2,6 +2,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fetch from 'node-fetch'; // Ensure you have node-fetch installed
 
 // Fix __dirname for ESM
 const __filename = fileURLToPath(import.meta.url);
