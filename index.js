@@ -40,7 +40,7 @@ const saveDB = () => fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 // Helper: Extract episode number
 const extractEpisode = (filename) => {
   const match = filename.match(/(?:episode|ep|(\d+))/i);
-  return match ? parseInt(match[1]  match[0], 10) : null;
+  return match ? parseInt(match[1] || match[0], 10) : null;
 };
 
 // Welcome message function
@@ -67,38 +67,45 @@ bot.onText(/\/total/, async (msg) => {
 });
 
 // Function to save video
-const saveVideo = async (videoFile, fileName) => {
+const saveVideo = async (fileId, fileName) => {
   const episode = extractEpisode(fileName);
   const newFileName = episode ? `One Piece Episode ${episode}.mp4` : `One Piece ${fileName}`;
   const localPath = path.join(VIDEO_DIR, newFileName);
 
   // Save the video file
-  const filePath = await bot.getFileLink(videoFile);
+  const filePath = await bot.getFileLink(fileId);
   const response = await fetch(filePath);
   const buffer = await response.buffer();
   fs.writeFileSync(localPath, buffer);
 
-  return { fileId: videoFile, name: newFileName, episode };
+  return { fileId, name: newFileName, episode };
 };
 
 // Function to handle video uploads
 const handleVideoUpload = async (msg) => {
   const chatId = msg.chat.id;
-  const fileName = msg.video.file_name  video_${msg.video.file_id}.mp4;
-  const fileId = msg.video.file_id;
+  let fileId, fileName;
+
+  if (msg.video) {
+    fileId = msg.video.file_id;
+    fileName = msg.video.file_name || `video_${fileId}.mp4`;
+  } else if (msg.document) {
+    fileId = msg.document.file_id;
+    fileName = msg.document.file_name || `document_${fileId}.mp4`;
+  }
 
   try {
     const videoDetails = await saveVideo(fileId, fileName);
     db.videos.push(videoDetails);
     saveDB();
-    bot.sendMessage(chatId, ✅ Uploaded: ${videoDetails.name});
+    bot.sendMessage(chatId, `✅ Uploaded: ${videoDetails.name}`);
   } catch (err) {
     console.error('Upload failed:', err);
     bot.sendMessage(chatId, '❌ Failed to upload video.');
   }
 };
 
-// Admin: Upload video
+// Admin: Upload video or document
 bot.on(['video', 'document'], async (msg) => {
   const chatId = msg.chat.id;
   if (chatId.toString() === ADMIN_ID) {
